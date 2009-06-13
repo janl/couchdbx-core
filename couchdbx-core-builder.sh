@@ -8,10 +8,10 @@
 # customise here:
 
 # use full svn path for branches like "branches/0.9.x"
-COUCHDB_VERSION="trunk"
+COUCHDB_VERSION="tags/0.9.0"
 
 # or R12B-5
-ERLANG_VERSION="R13A"
+ERLANG_VERSION="R13B"
 
 # make options
 MAKE_OPTS="-j4"
@@ -50,7 +50,6 @@ erlang_install()
       --without-wxwidgets
     make # can't have -jN so no $MAKEOPTS
     make install
-    erlang_post_install
     cd ../../
     touch .erlang-installed
   fi
@@ -58,15 +57,25 @@ erlang_install()
 
 erlang_post_install()
 {
+  cd dist/erlang
   # change absolute paths to relative paths
-  perl -pi -e 's/$WORKDIR\/dist/`pwd`/' \
+  perl -pi -e "s@$WORKDIR/dist@\`pwd\`@" bin/erl
+  # add quotes for paths with spaces
+  perl -pi -e \
+    's@`pwd`/erlang/lib/erlang@"`pwd`/erlang/lib/erlang"@' \
     bin/erl
+  perl -pi -e 's@\$BINDIR/erlexec@"\$BINDIR/erlexec"@' bin/erl
 
+  cd ../../
+}
+
+strip_erlang_dist()
+{
   # strip unused erlang crap^Wlibs
-  cd dist/erlang/lib/erlang/lib
+  cd $WORKDIR/dist/erlang/lib/erlang/lib
   rm -rf \
     appmon-*/ \
-    asn-*/ \
+    asn1-*/ \
     common_test-*/ \
     compiler-*/ \
     cosEvent-*/ \
@@ -77,7 +86,7 @@ erlang_post_install()
     cosTime-*/ \
     cosTransactions-*/ \
     debugger-*/ \
-    dializer-*/ \
+    dialyzer-*/ \
     docbuilder-*/ \
     edoc-*/ \
     erl_interface-*/ \
@@ -112,7 +121,12 @@ erlang_post_install()
     typer-*/ \
     webtool-*/ \
     wx-*/
+    find . -name "src" | xargs rm -rf
+    cd ../../../../../
 
+    rm js/lib/libjs.a
+    rm -rf js/bin
+    rm -rf Darwin_DBG.OBJ
 }
 
 erlang()
@@ -143,7 +157,8 @@ couchdb_install()
     ./configure \
       --prefix=$WORKDIR/dist/couchdb \
       --with-erlang=$WORKDIR/dist/erlang/lib/erlang/usr/include/ \
-      --with-js-include=/usr/local/include --with-js-lib=/usr/local/lib
+      --with-js-include=$WORKDIR/dist/js/include \
+      --with-js-lib=$WORKDIR/dist/js/lib
     unset ERL_EXECUTABLE
     unset ERLC_EXECUTABLE
 
@@ -158,12 +173,13 @@ couchdb_install()
 couchdb_link_erl_driver()
 {
   cd src/couchdb
-    gcc -I/usr/include -I/usr/lib \
+    gcc -I$WORKDIR/src/icu -I/usr/include -L/usr/lib \
         -I$WORKDIR/dist/erlang/lib/erlang/usr/include/ \
         -lpthread -lm -licucore \
         -flat_namespace -undefined suppress -bundle \
         -o couch_erl_driver.so couch_erl_driver.c -fPIC
-    cp couch_erl_driver.so ../../../../dist/couchdb/
+    mv couch_erl_driver.so \
+      ../../../../dist/couchdb/lib/couchdb/erlang/lib/couch-*/priv/lib
   cd ../../
 }
 
@@ -172,10 +188,13 @@ couchdb_post_install()
   # build couch_erl_driver.so against bundlered ICU
   couchdb_link_erl_driver
 
+  cd ../../dist/couchdb
   # replace absolute to relative paths
-  perl -pi -e 's/$WORKDIR\/dist/`pwd`/' \
-    bin/couchdb \
-    etc/couchdb/default.ini
+  perl -pi -e "s@$WORKDIR/dist/@@g" bin/couchdb bin/couchjs etc/couchdb/default.ini
+
+  # remove icu-config call
+  perl -pi -e "s@command=\"\`/usr/local/bin/icu-config --invoke\`@command=\"@" bin/couchdb
+  cd ../../src/couchdb
 }
 
 couchdb()
@@ -196,25 +215,60 @@ cleanup()
     .couchdb-downloaded .couchdb-installed
 }
 
-icu_download()
+download_icu()
 {
-  cd src/
+  cd $WORKDIR/src/
   if [ ! -d icu ]; then
     svn export http://svn.webkit.org/repository/webkit/releases/Apple/Leopard/Mac%20OS%20X%2010.5/WebKit/icu/
   fi
   cd ../
 }
 
+download_js()
+{
+  if [ ! -e .js-downloaded ]; then
+    cd src
+    if [ ! -e js-1.7.0.tar.gz ]; then
+      curl -O http://ftp.mozilla.org/pub/mozilla.org/js/js-1.7.0.tar.gz
+    fi
+    tar xzf js-1.7.0.tar.gz
+    cd ..
+    touch .js-downloaded
+  fi
+}
+
+install_js()
+{
+  if [ ! -e .js-installed ]; then
+    cd src/js
+    cd src
+    make $MAKEOPTS -f Makefile.ref
+    JS_DIST=$WORKDIR/dist/js make -f Makefile.ref export
+    cd ../../../
+    mkdir dist/Darwin_DBG.OBJ/
+    cp dist/js/lib/libjs.dylib dist/Darwin_DBG.OBJ/libjs.dylib
+    touch .js-installed
+  fi
+}
+
+js()
+{
+  download_js
+  install_js
+}
+
+
 icu()
 {
-  icu_download
+  download_icu  
 }
 
 package()
 {
+  rm -rf couchdbx-core
   mkdir couchdbx-core
   cp -r dist/* couchdbx-core
-  tar czf couchdbx-core.tar.gz couchdbx-core
+  tar czf couchdbx-core-0.9.0-R12B-5.tar.gz couchdbx-core
 }
 
 # main:
@@ -222,7 +276,10 @@ package()
 create_dirs
 erlang
 icu
+js
 couchdb
+erlang_post_install
+strip_erlang_dist
 package
 
 echo "Done, kthxbye."
