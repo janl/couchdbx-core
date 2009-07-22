@@ -8,7 +8,8 @@
 # customise here:
 
 # use full svn path for branches like "branches/0.9.x"
-COUCHDB_VERSION="tags/0.9.0"
+COUCHDB_VERSION="0.9.1"
+COUCHDB_SVNPAPTH="tags/$COUCHDB_VERSION"
 
 # or R12B-5
 ERLANG_VERSION="R13B"
@@ -124,7 +125,7 @@ strip_erlang_dist()
     find . -name "src" | xargs rm -rf
     cd ../../../../../
 
-    rm js/lib/libjs.a
+    rm -f js/lib/libjs.a
     rm -rf js/bin
     rm -rf Darwin_DBG.OBJ
 }
@@ -140,7 +141,7 @@ couchdb_download()
   if [ ! -e .couchdb-downloaded ]; then
     cd src
     if [ ! -d couchdb ]; then
-      svn export http://svn.apache.org/repos/asf/couchdb/$COUCHDB_VERSION couchdb
+      svn export http://svn.apache.org/repos/asf/couchdb/$COUCHDB_SVNPAPTH couchdb
     fi
     cd ..
     touch .couchdb-downloaded
@@ -268,7 +269,7 @@ package()
   rm -rf couchdbx-core
   mkdir couchdbx-core
   cp -r dist/* couchdbx-core
-  tar czf couchdbx-core-0.9.0-R12B-5.tar.gz couchdbx-core
+  tar czf couchdbx-core-$COCUHDB_VERSION-$ERLANG_VERSION.tar.gz couchdbx-core
 }
 
 # main:
