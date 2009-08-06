@@ -12,7 +12,7 @@ COUCHDB_VERSION="0.9.1"
 COUCHDB_SVNPAPTH="tags/$COUCHDB_VERSION"
 
 # or R12B-5
-ERLANG_VERSION="R13B"
+ERLANG_VERSION="R13B01"
 
 # make options
 MAKE_OPTS="-j4"
@@ -186,8 +186,10 @@ couchdb_link_erl_driver()
 
 couchdb_post_install()
 {
-  # build couch_erl_driver.so against bundlered ICU
-  couchdb_link_erl_driver
+  if [ "`uname`" eq "Darwin"]; then
+    # build couch_erl_driver.so against bundlered ICU
+    couchdb_link_erl_driver
+  fi
 
   cd ../../dist/couchdb
   # replace absolute to relative paths
@@ -241,13 +243,19 @@ download_js()
 install_js()
 {
   if [ ! -e .js-installed ]; then
+    uname=`uname`
+    if [ "$uname" -eq "Darwin" ]; then
+      soext="dylib"
+    else
+      soext="so"
+    fi
     cd src/js
     cd src
     make $MAKEOPTS -f Makefile.ref
     JS_DIST=$WORKDIR/dist/js make -f Makefile.ref export
     cd ../../../
-    mkdir dist/Darwin_DBG.OBJ/
-    cp dist/js/lib/libjs.dylib dist/Darwin_DBG.OBJ/libjs.dylib
+    mkdir -p dist/${uname}_DBG.OBJ/
+    cp dist/js/lib*/libjs.$soext dist/${uname}_DBG.OBJ/libjs.$soext
     touch .js-installed
   fi
 }
@@ -269,7 +277,7 @@ package()
   rm -rf couchdbx-core
   mkdir couchdbx-core
   cp -r dist/* couchdbx-core
-  tar czf couchdbx-core-$COCUHDB_VERSION-$ERLANG_VERSION.tar.gz couchdbx-core
+  tar czf couchdbx-core-$COUCHDB_VERSION-$ERLANG_VERSION.tar.gz couchdbx-core
 }
 
 # main:
