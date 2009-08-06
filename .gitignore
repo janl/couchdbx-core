@@ -1,0 +1,14 @@
+.couchdb-downloaded
+.couchdb-installed
+.erlang-downloaded
+.erlang-installed
+.js-downloaded
+.js-installed
+couchdbx-core--R13B01.tar.gz
+couchdbx-core/
+dist/
+src/couchdb/
+src/erlang/
+src/js-1.7.0.tar.gz
+src/js/
+src/otp_src_R13B01.tar.gz
