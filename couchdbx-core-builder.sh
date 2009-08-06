@@ -12,7 +12,7 @@ COUCHDB_VERSION="0.9.1"
 COUCHDB_SVNPAPTH="tags/$COUCHDB_VERSION"
 
 # or R12B-5
-ERLANG_VERSION="R13B"
+ERLANG_VERSION="R13B01"
 
 # make options
 MAKE_OPTS="-j4"
@@ -48,7 +48,10 @@ erlang_install()
     ./configure \
       --prefix=$WORKDIR/dist/erlang \
       --disable-hipe \
-      --without-wxwidgets
+      --without-wxwidgets \
+      --enable-dynamic-ssl-lib \
+      --with-ssl=/usr \
+      --disable-java
     make # can't have -jN so no $MAKEOPTS
     make install
     cd ../../
@@ -122,6 +125,7 @@ strip_erlang_dist()
     typer-*/ \
     webtool-*/ \
     wx-*/
+
     find . -name "src" | xargs rm -rf
     cd ../../../../../
 
