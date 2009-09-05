@@ -8,8 +8,8 @@
 # customise here:
 
 # use full svn path for branches like "branches/0.9.x"
-COUCHDB_VERSION="0.9.1"
-COUCHDB_SVNPAPTH="tags/$COUCHDB_VERSION"
+COUCHDB_VERSION="0.10.0a"
+COUCHDB_SVNPAPTH="branches/0.10.x"
 
 # or R12B-5
 ERLANG_VERSION="R13B01"
@@ -47,7 +47,7 @@ erlang_install()
     cd src/erlang
     ./configure \
       --prefix=$WORKDIR/dist/erlang \
-      --disable-hipe \
+      --enable-hipe \
       --without-wxwidgets \
       --enable-dynamic-ssl-lib \
       --with-ssl=/usr \
@@ -156,7 +156,9 @@ couchdb_install()
 {
   if [ ! -e .couchdb-installed ]; then
     cd src/couchdb
-    ./bootstrap
+    # PATH hack for jan's machine
+    PATH=/usr/bin:$PATH ./bootstrap
+    export ERLC_FLAGS="+native"
     export ERL=$WORKDIR/dist/erlang/bin/erl
     export ERLC=$WORKDIR/dist/erlang/bin/erlc
     ./configure \
@@ -190,7 +192,7 @@ couchdb_link_erl_driver()
 
 couchdb_post_install()
 {
-  if [ "`uname`" eq "Darwin"]; then
+  if [ "`uname`" = "Darwin" ]; then
     # build couch_erl_driver.so against bundlered ICU
     couchdb_link_erl_driver
   fi
@@ -222,14 +224,6 @@ cleanup()
     .couchdb-downloaded .couchdb-installed
 }
 
-download_icu()
-{
-  cd $WORKDIR/src/
-  if [ ! -d icu ]; then
-    svn export http://svn.webkit.org/repository/webkit/releases/Apple/Leopard/Mac%20OS%20X%2010.5/WebKit/icu/
-  fi
-  cd ../
-}
 
 download_js()
 {
@@ -248,13 +242,14 @@ install_js()
 {
   if [ ! -e .js-installed ]; then
     uname=`uname`
-    if [ "$uname" -eq "Darwin" ]; then
+    if [ "$uname" = "Darwin" ]; then
       soext="dylib"
     else
       soext="so"
     fi
     cd src/js
     cd src
+    patch -N -p0 < ../../../patches/js/patch-jsprf.c
     make $MAKEOPTS -f Makefile.ref
     JS_DIST=$WORKDIR/dist/js make -f Makefile.ref export
     cd ../../../
@@ -271,10 +266,6 @@ js()
 }
 
 
-icu()
-{
-  download_icu  
-}
 
 package()
 {
@@ -288,7 +279,6 @@ package()
 
 create_dirs
 erlang
-icu
 js
 couchdb
 erlang_post_install
