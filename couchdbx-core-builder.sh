@@ -8,26 +8,39 @@
 # customise here:
 
 # use full svn path for branches like "branches/0.9.x"
-COUCHDB_VERSION="0.10.0a"
-COUCHDB_SVNPAPTH="branches/0.10.x"
+if [ -z "$COUCHDB_VERSION" ]; then
+    COUCHDB_VERSION="0.11.0a"
+fi
+
+if [ -z "$COUCHDB_SVNPATH" ]; then
+    COUCHDB_SVNPATH="trunk"
+fi
 
 # or R12B-5
-ERLANG_VERSION="R13B01"
+if [ -z "$ERLANG_VERSION" ]; then
+    ERLANG_VERSION="R13B02"
+fi
 
 # make options
 MAKE_OPTS="-j4"
 
 
-# stop customizing
+# stop customising
 
 # internal vars
 DIRS="src dist"
 WORKDIR=`pwd`
 
-# functions
+ERLANGSRCDIR="erlang_$ERLANG_VERSION"
+ERLANGDISTDIR="$ERLANGSRCDIR"
+
+COUCHDBSRCDIR="couchdb_$COUCHDB_VERSION"
+COUCHDBDISTDIR="$COUCHDBSRCDIR"
+
+#functions
 erlang_download()
 {
-  if [ ! -e .erlang-downloaded ]; then
+  if [ ! -e .erlang-$ERLANG_VERSION-downloaded ]; then
     FILE_NAME="otp_src_$ERLANG_VERSION"
     BASE_URL="http://www.csd.uu.se/ftp/mirror/erlang/download"
     cd src
@@ -35,33 +48,37 @@ erlang_download()
       curl -O $BASE_URL/$FILE_NAME.tar.gz
     fi
     tar xzf $FILE_NAME.tar.gz
-    mv $FILE_NAME erlang
+    mv $FILE_NAME $ERLANGSRCDIR
     cd ..
-    touch .erlang-downloaded
+    touch .erlang-$ERLANG_VERSION-downloaded
   fi
 }
 
 erlang_install()
 {
-  if [ ! -e .erlang-installed ]; then
-    cd src/erlang
+  if [ ! -e .erlang-$ERLANG_VERSION-installed ]; then
+    cd src/$ERLANGSRCDIR
     ./configure \
-      --prefix=$WORKDIR/dist/erlang \
+      --prefix=$WORKDIR/dist/$ERLANGDISTDIR \
       --enable-hipe \
       --without-wxwidgets \
       --enable-dynamic-ssl-lib \
       --with-ssl=/usr \
-      --disable-java
+      --without-java \
+      --enable-darwin-64bit
     make # can't have -jN so no $MAKEOPTS
     make install
     cd ../../
-    touch .erlang-installed
+    touch .erlang-$ERLANG_VERSION-installed
   fi
 }
 
 erlang_post_install()
 {
-  cd dist/erlang
+  cd dist/
+  cp -r $ERLANGDISTDIR erlang
+  cd $ERLANGDISTDIR
+
   # change absolute paths to relative paths
   perl -pi -e "s@$WORKDIR/dist@\`pwd\`@" bin/erl
   # add quotes for paths with spaces
@@ -76,7 +93,7 @@ erlang_post_install()
 strip_erlang_dist()
 {
   # strip unused erlang crap^Wlibs
-  cd $WORKDIR/dist/erlang/lib/erlang/lib
+  cd $WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/lib
   rm -rf \
     appmon-*/ \
     asn1-*/ \
@@ -144,8 +161,8 @@ couchdb_download()
 {
   if [ ! -e .couchdb-downloaded ]; then
     cd src
-    if [ ! -d couchdb ]; then
-      svn export http://svn.apache.org/repos/asf/couchdb/$COUCHDB_SVNPAPTH couchdb
+    if [ ! -d "$COUCHDBSRCDIR" ]; then
+      svn checkout http://svn.apache.org/repos/asf/couchdb/$COUCHDB_SVNPATH $COUCHDBSRCDIR
     fi
     cd ..
     touch .couchdb-downloaded
@@ -154,16 +171,16 @@ couchdb_download()
 
 couchdb_install()
 {
-  if [ ! -e .couchdb-installed ]; then
-    cd src/couchdb
+  # if [ ! -e .couchdb-installed ]; then
+    cd src/$COUCHDBSRCDIR
     # PATH hack for jan's machine
     PATH=/usr/bin:$PATH ./bootstrap
     export ERLC_FLAGS="+native"
-    export ERL=$WORKDIR/dist/erlang/bin/erl
-    export ERLC=$WORKDIR/dist/erlang/bin/erlc
+    export ERL=$WORKDIR/dist/$ERLANGDISTDIR/bin/erl
+    export ERLC=$WORKDIR/dist/$ERLANGDISTDIR/bin/erlc
     ./configure \
-      --prefix=$WORKDIR/dist/couchdb \
-      --with-erlang=$WORKDIR/dist/erlang/lib/erlang/usr/include/ \
+      --prefix=$WORKDIR/dist/$COUCHDBDISTDIR \
+      --with-erlang=$WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/usr/include/ \
       --with-js-include=$WORKDIR/dist/js/include \
       --with-js-lib=$WORKDIR/dist/js/lib
     unset ERL_EXECUTABLE
@@ -173,37 +190,37 @@ couchdb_install()
     make install
     couchdb_post_install
     cd ../../
-    touch .couchdb-installed
-  fi
+  #   touch .couchdb-installed
+  # fi
 }
 
 couchdb_link_erl_driver()
 {
   cd src/couchdb
     gcc -I$WORKDIR/src/icu -I/usr/include -L/usr/lib \
-        -I$WORKDIR/dist/erlang/lib/erlang/usr/include/ \
+        -I$WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/usr/include/ \
         -lpthread -lm -licucore \
         -flat_namespace -undefined suppress -bundle \
         -o couch_erl_driver.so couch_erl_driver.c -fPIC
     mv couch_erl_driver.so \
-      ../../../../dist/couchdb/lib/couchdb/erlang/lib/couch-*/priv/lib
+      ../../../../dist/$COUCHDBDISTDIR/lib/couchdb/erlang/lib/couch-*/priv/lib
   cd ../../
 }
 
 couchdb_post_install()
 {
   if [ "`uname`" = "Darwin" ]; then
-    # build couch_erl_driver.so against bundlered ICU
+    # build couch_erl_driver.so against bundled ICU
     couchdb_link_erl_driver
   fi
 
-  cd ../../dist/couchdb
+  cd ../../dist/$COUCHDBDISTDIR
   # replace absolute to relative paths
   perl -pi -e "s@$WORKDIR/dist/@@g" bin/couchdb bin/couchjs etc/couchdb/default.ini
 
   # remove icu-config call
   perl -pi -e "s@command=\"\`/usr/local/bin/icu-config --invoke\`@command=\"@" bin/couchdb
-  cd ../../src/couchdb
+  cd ../../src/$COUCHDBSRCDIR
 }
 
 couchdb()
@@ -265,14 +282,21 @@ js()
   install_js
 }
 
-
-
 package()
 {
-  rm -rf couchdbx-core
-  mkdir couchdbx-core
-  cp -r dist/* couchdbx-core
-  tar czf couchdbx-core-$COUCHDB_VERSION-$ERLANG_VERSION.tar.gz couchdbx-core
+  PACKAGEDIR="couchdbx-core-$ERLANG_VERSION-$COUCHDB_VERSION"
+  rm -rf $PACKAGEDIR
+  mkdir $PACKAGEDIR
+  cp -r dist/$ERLANGDISTDIR $PACKAGEDIR/erlang
+  cp -r dist/$COUCHDBDISTDIR $PACKAGEDIR/couchdb 
+  cp -r dist/js $PACKAGEDIR
+  tar czf $PACKAGEDIR.tar.gz $PACKAGEDIR
+  # mv $PACKAGEDIR ../couchdbx-dist
+  # mv $PACKAGEDIR.tar.gz ../couchdbx-dist
+
+  cd dist/
+  rm -rf $ERLANGDISTDIR
+  mv erlang $ERLANGDISTDIR
 }
 
 # main:
