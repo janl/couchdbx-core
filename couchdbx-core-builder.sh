@@ -69,16 +69,17 @@ erlang_install()
     make # can't have -jN so no $MAKEOPTS
     make install
     cd ../../
+    cd dist
+    rm -rf erlang
+    cp -r $ERLANGDISTDIR erlang
+
     touch .erlang-$ERLANG_VERSION-installed
   fi
 }
 
 erlang_post_install()
 {
-  cd dist/
-  cp -r $ERLANGDISTDIR erlang
-  cd $ERLANGDISTDIR
-
+  cd dist/$ERLANGDISTDIR
   # change absolute paths to relative paths
   perl -pi -e "s@$WORKDIR/dist@\`pwd\`@" bin/erl
   # add quotes for paths with spaces
@@ -159,14 +160,11 @@ erlang()
 
 couchdb_download()
 {
-  if [ ! -e .couchdb-downloaded ]; then
     cd src
     if [ ! -d "$COUCHDBSRCDIR" ]; then
       svn checkout http://svn.apache.org/repos/asf/couchdb/$COUCHDB_SVNPATH $COUCHDBSRCDIR
     fi
     cd ..
-    touch .couchdb-downloaded
-  fi
 }
 
 couchdb_install()
@@ -287,9 +285,13 @@ package()
   PACKAGEDIR="couchdbx-core-$ERLANG_VERSION-$COUCHDB_VERSION"
   rm -rf $PACKAGEDIR
   mkdir $PACKAGEDIR
-  cp -r dist/$ERLANGDISTDIR $PACKAGEDIR/erlang
-  cp -r dist/$COUCHDBDISTDIR $PACKAGEDIR/couchdb 
-  cp -r dist/js $PACKAGEDIR
+  cp -r dist/$ERLANGDISTDIR \
+      dist/$COUCHDBDISTDIR \
+      dist/js \
+      $PACKAGEDIR
+  cd $PACKAGEDIR
+  ln -s $COUCHDBDISTDIR couchdb
+  cd ..
   tar czf $PACKAGEDIR.tar.gz $PACKAGEDIR
   # mv $PACKAGEDIR ../couchdbx-dist
   # mv $PACKAGEDIR.tar.gz ../couchdbx-dist
@@ -297,6 +299,7 @@ package()
   cd dist/
   rm -rf $ERLANGDISTDIR
   mv erlang $ERLANGDISTDIR
+  cd ..
 }
 
 # main:
