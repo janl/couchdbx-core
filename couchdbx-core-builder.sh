@@ -72,7 +72,7 @@ erlang_install()
     cd dist
     rm -rf erlang
     cp -r $ERLANGDISTDIR erlang
-
+    cd ..
     touch .erlang-$ERLANG_VERSION-installed
   fi
 }
