@@ -9,16 +9,16 @@
 
 # use full svn path for branches like "branches/0.9.x"
 if [ -z "$COUCHDB_VERSION" ]; then
-    COUCHDB_VERSION="0.11.0a"
+    COUCHDB_VERSION="0.10.1"
 fi
 
 if [ -z "$COUCHDB_SVNPATH" ]; then
-    COUCHDB_SVNPATH="trunk"
+    COUCHDB_SVNPATH="tags/0.10.1"
 fi
 
 # or R12B-5
 if [ -z "$ERLANG_VERSION" ]; then
-    ERLANG_VERSION="R13B02"
+    ERLANG_VERSION="R13B03"
 fi
 
 # make options
@@ -61,11 +61,12 @@ erlang_install()
     ./configure \
       --prefix=$WORKDIR/dist/$ERLANGDISTDIR \
       --enable-hipe \
-      --without-wxwidgets \
       --enable-dynamic-ssl-lib \
       --with-ssl=/usr \
       --without-java \
       --enable-darwin-64bit
+    # skip wxWidgets
+    touch lib/wx/SKIP
     make # can't have -jN so no $MAKEOPTS
     make install
     cd ../../
@@ -93,6 +94,10 @@ erlang_post_install()
 
 strip_erlang_dist()
 {
+
+  # backup erlang build tree
+  cp -r $WORKDIR/dist/$ERLANGDISTDIR $WORKDIR/dist/erlang
+
   # strip unused erlang crap^Wlibs
   cd $WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/lib
   rm -rf \
@@ -194,15 +199,28 @@ couchdb_install()
 
 couchdb_link_erl_driver()
 {
-  cd src/couchdb
-    gcc -I$WORKDIR/src/icu -I/usr/include -L/usr/lib \
-        -I$WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/usr/include/ \
-        -lpthread -lm -licucore \
-        -flat_namespace -undefined suppress -bundle \
-        -o couch_erl_driver.so couch_erl_driver.c -fPIC
-    mv couch_erl_driver.so \
-      ../../../../dist/$COUCHDBDISTDIR/lib/couchdb/erlang/lib/couch-*/priv/lib
-  cd ../../
+
+  if [ -d "src/couchdb/priv/icu_driver/" ]; then # we're on trunk
+    cd src/couchdb/priv/icu_driver/
+      gcc -I$WORKDIR/src/icu -I/usr/include -L/usr/lib \
+          -I$WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/usr/include/ \
+          -lpthread -lm -licucore \
+          -flat_namespace -undefined suppress -bundle \
+          -o couch_icu_driver.so couch_icu_driver.c -fPIC
+      mv couch_icu_driver.so \
+        ../../../../../../dist/$COUCHDBDISTDIR/lib/couchdb/erlang/lib/couch-*/priv/lib
+      cd ../../../../
+  else # we're on 0.10 or earlier
+    cd src/couchdb
+      gcc -I$WORKDIR/src/icu -I/usr/include -L/usr/lib \
+          -I$WORKDIR/dist/$ERLANGDISTDIR/lib/erlang/usr/include/ \
+          -lpthread -lm -licucore \
+          -flat_namespace -undefined suppress -bundle \
+          -o couch_erl_driver.so couch_erl_driver.c -fPIC
+      mv couch_erl_driver.so \
+        ../../../../dist/$COUCHDBDISTDIR/lib/couchdb/erlang/lib/couch-*/priv/lib
+      cd ../../
+  fi
 }
 
 couchdb_post_install()
@@ -268,8 +286,6 @@ install_js()
     make $MAKEOPTS -f Makefile.ref
     JS_DIST=$WORKDIR/dist/js make -f Makefile.ref export
     cd ../../../
-    mkdir -p dist/${uname}_DBG.OBJ/
-    cp dist/js/lib*/libjs.$soext dist/${uname}_DBG.OBJ/libjs.$soext
     touch .js-installed
   fi
 }
@@ -289,12 +305,12 @@ package()
       dist/$COUCHDBDISTDIR \
       dist/js \
       $PACKAGEDIR
+  install_name_tool -change Darwin_DBG.OBJ/libjs.dylib js/lib/libjs.dylib \
+  $WORKDIR/dist/$COUCHDBSRCDIR/lib/couchdb/bin/couchjs
   cd $PACKAGEDIR
   ln -s $COUCHDBDISTDIR couchdb
   cd ..
   tar czf $PACKAGEDIR.tar.gz $PACKAGEDIR
-  # mv $PACKAGEDIR ../couchdbx-dist
-  # mv $PACKAGEDIR.tar.gz ../couchdbx-dist
 
   cd dist/
   rm -rf $ERLANGDISTDIR
