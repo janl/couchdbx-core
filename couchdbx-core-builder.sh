@@ -63,8 +63,7 @@ erlang_install()
       --enable-hipe \
       --enable-dynamic-ssl-lib \
       --with-ssl=/usr \
-      --without-java \
-      --enable-darwin-64bit
+      --without-java
     # skip wxWidgets
     touch lib/wx/SKIP
     make # can't have -jN so no $MAKEOPTS
@@ -176,6 +175,10 @@ couchdb_install()
 {
   # if [ ! -e .couchdb-installed ]; then
     cd src/$COUCHDBSRCDIR
+
+    # remove icu-config call
+    perl -pi -e "s@command=\"\`%ICU_CONFIG% --invoke\`@command=\"@" bin/couchdb.tpl.in
+
     # PATH hack for jan's machine
     PATH=/usr/bin:$PATH ./bootstrap
     export ERLC_FLAGS="+native"
@@ -234,8 +237,6 @@ couchdb_post_install()
   # replace absolute to relative paths
   perl -pi -e "s@$WORKDIR/dist/@@g" bin/couchdb bin/couchjs etc/couchdb/default.ini
 
-  # remove icu-config call
-  perl -pi -e "s@command=\"\`/usr/local/bin/icu-config --invoke\`@command=\"@" bin/couchdb
   cd ../../src/$COUCHDBSRCDIR
 }
 
@@ -306,7 +307,7 @@ package()
       dist/js \
       $PACKAGEDIR
   install_name_tool -change Darwin_DBG.OBJ/libjs.dylib js/lib/libjs.dylib \
-  $WORKDIR/dist/$COUCHDBSRCDIR/lib/couchdb/bin/couchjs
+  $PACKAGEDIR/$COUCHDBDISTDIR/lib/couchdb/bin/couchjs
   cd $PACKAGEDIR
   ln -s $COUCHDBDISTDIR couchdb
   cd ..
